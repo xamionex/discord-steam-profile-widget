@@ -11,6 +11,7 @@ This project updates a Discord widget with data from your Steam profile, includi
 * Currently / most recently played game
 * Games owned count
 * Recent (2 week) playtime
+* Total playtime (all time)
 * Profile age
 * Badge count
 * Friend count
@@ -74,6 +75,7 @@ exactly, otherwise the data will not bind.
 | last_played   | String |
 | games         | Number |
 | playtime      | String |
+| total_playtime | String |
 | profile_age   | String |
 | badges        | Number |
 | friends       | Number |
@@ -94,7 +96,7 @@ Do **not** use `Application Asset`, otherwise the avatar will not update dynamic
 
 > `level`, `games`, `badges`, `friends` and `recent_playtime` are sent as numbers (payload `type: 2`),
 > so set them up as `Number` fields in the widget editor and let the widget design supply any labels.
-> `playtime` and `profile_age` stay `String` because they carry units (`hrs`, `years`).
+> `playtime`, `total_playtime` and `profile_age` stay `String` because they carry units (`hrs`, `years`).
 >
 > `recent_playtime` is the same 2 week total as `playtime`, just as a bare number instead of a
 > `"X.X hrs"` string. Pick whichever fits your widget design; you do not need both.
@@ -165,7 +167,7 @@ The script:
 
    * `GetPlayerSummaries` (avatar, persona, status, current game, profile age)
    * `GetSteamLevel` (Steam level)
-   * `GetOwnedGames` (games owned count, all time most played game)
+   * `GetOwnedGames` (games owned count, all time most played game, total playtime)
    * `GetRecentlyPlayedGames` (last played game, 2 week playtime/hours, 2 week most played game)
    * `GetBadges` (badge count)
    * `GetFriendList` (friend count)
