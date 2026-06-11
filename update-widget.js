@@ -105,6 +105,7 @@ async function updateWidget() {
   // Owned games count + all time most played (requires public game details).
   let games = 0;
   let mostPlayedGame = "None";
+  let totalPlaytimeMinutes = 0;
   try {
     const ownedRes = await steamGet("/IPlayerService/GetOwnedGames/v1/", {
       steamid: steamId,
@@ -123,9 +124,16 @@ async function updateWidget() {
     if (topOwned?.name) {
       mostPlayedGame = topOwned.name;
     }
+    // Sum all playtime_forever to get total playtime
+    totalPlaytimeMinutes = ownedGames.reduce(
+      (sum, game) => sum + (game.playtime_forever || 0),
+      0
+    );
   } catch (err) {
     console.warn("Could not fetch owned games:", err.message);
   }
+
+  const totalPlaytime = formatHours(totalPlaytimeMinutes);
 
   // Recently played: last played, summed 2 week playtime, and 2 week most played.
   let lastPlayed = inGameName || "None";
@@ -232,6 +240,11 @@ async function updateWidget() {
         },
         {
           type: 1,
+          name: "total_playtime",
+          value: totalPlaytime
+        },
+        {
+          type: 1,
           name: "profile_age",
           value: profileAge
         },
@@ -295,6 +308,7 @@ async function updateWidget() {
   console.log("📈 Level:", level);
   console.log("🎲 Games:", games);
   console.log("⏱ Recent playtime:", playtime);
+  console.log("⏳ Total playtime:", totalPlaytime);
   console.log("📅 Profile age:", profileAge);
   console.log("🏅 Badges:", badges);
   console.log("🤝 Friends:", friends);
