@@ -1,0 +1,13 @@
+{
+  "name": "discord-steam-profile-widget",
+  "version": "1.0.0",
+  "description": "Automatically sync your Steam profile with Discord Profile Widgets.",
+  "main": "update-widget.js",
+  "scripts": {
+    "start": "node update-widget.js"
+  },
+  "dependencies": {
+    "axios": "^1.17.0",
+    "dotenv": "^17.4.2"
+  }
+}
