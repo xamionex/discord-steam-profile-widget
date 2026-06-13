@@ -18,9 +18,7 @@ const PERSONA_STATE = {
 async function steamGet(path, params) {
   const { data } = await axios.get(`${STEAM_API}${path}`, {
     params: { key: process.env.STEAM_API_KEY, ...params },
-    headers: {
-      "User-Agent": "discord-steam-profile-widget"
-    }
+    headers: { "User-Agent": "discord-steam-profile-widget" }
   });
   return data;
 }
@@ -30,81 +28,66 @@ function formatHours(minutes) {
   return `${hours.toFixed(1)} hrs`;
 }
 
+// All time playtime can be thousands of hours, so round to whole hours with a thousands separator.
+function formatTotalHours(minutes) {
+  const hours = Math.round((minutes || 0) / 60);
+  return `${hours.toLocaleString("en-US")} hrs`;
+}
+
 // Account age from the unix creation timestamp. Whole years, or months when under a year.
 function formatProfileAge(timeCreated) {
-  if (!timeCreated) {
-    return "Unknown";
-  }
+  if (!timeCreated) return "Unknown";
   const created = new Date(timeCreated * 1000);
   const now = new Date();
   let months =
     (now.getFullYear() - created.getFullYear()) * 12 +
     (now.getMonth() - created.getMonth());
-  if (now.getDate() < created.getDate()) {
-    months -= 1;
-  }
-  if (months < 0) {
-    months = 0;
-  }
+  if (now.getDate() < created.getDate()) months -= 1;
+  if (months < 0) months = 0;
   const years = Math.floor(months / 12);
-  if (years >= 1) {
-    return `${years} year${years === 1 ? "" : "s"}`;
-  }
+  if (years >= 1) return `${years} year${years === 1 ? "" : "s"}`;
   return `${months} month${months === 1 ? "" : "s"}`;
 }
 
 async function updateWidget() {
   const steamId = process.env.STEAM_ID;
 
-  if (!process.env.STEAM_API_KEY) {
-    throw new Error("STEAM_API_KEY missing");
-  }
-  if (!steamId) {
-    throw new Error("STEAM_ID missing");
-  }
+  if (!process.env.STEAM_API_KEY) throw new Error("STEAM_API_KEY missing");
+  if (!steamId) throw new Error("STEAM_ID missing");
 
-  // Player summary: avatar, persona, status, current game.
+  // Player summary: avatar, persona, status, current game, profile age.
   const summaryRes = await steamGet("/ISteamUser/GetPlayerSummaries/v0002/", {
     steamids: steamId
   });
-
   const player = summaryRes?.response?.players?.[0];
-  if (!player) {
-    throw new Error(`No Steam profile found for STEAM_ID ${steamId}`);
-  }
+  if (!player) throw new Error(`No Steam profile found for STEAM_ID ${steamId}`);
 
   // Cache bust so Discord refetches the image when it changes.
   const avatar =
     (player.avatarfull ||
       "https://avatars.steamstatic.com/fef49e7fa7e1997310d705b2a6158ff8dc1cdfeb_full.jpg") +
     `?v=${Date.now()}`;
-
   const username = player.personaname || "Unknown";
-
   const inGameName = player.gameextrainfo;
   const status = inGameName
     ? `In-Game: ${inGameName}`
     : PERSONA_STATE[player.personastate] ?? "Offline";
-
   // Account age (timecreated is only present on public profiles).
   const profileAge = formatProfileAge(player.timecreated);
 
   // Steam level (own endpoint). Sent as a number (widget field type 2).
   let level = 0;
   try {
-    const levelRes = await steamGet("/IPlayerService/GetSteamLevel/v1/", {
-      steamid: steamId
-    });
-    if (levelRes?.response?.player_level != null) {
-      level = levelRes.response.player_level;
-    }
+    const levelRes = await steamGet("/IPlayerService/GetSteamLevel/v1/", { steamid: steamId });
+    if (levelRes?.response?.player_level != null) level = levelRes.response.player_level;
   } catch (err) {
     console.warn("Could not fetch Steam level:", err.message);
   }
 
-  // Owned games count + all time most played (requires public game details).
+  // Owned games count, all time most played, and total playtime (requires public game details).
   let games = 0;
   let mostPlayedGame = "None";
+  let totalPlaytime = "0 hrs";
   try {
     const ownedRes = await steamGet("/IPlayerService/GetOwnedGames/v1/", {
       steamid: steamId,
@@ -112,52 +95,40 @@ async function updateWidget() {
       include_played_free_games: 1
     });
     const ownedGames = ownedRes?.response?.games || [];
-    if (ownedRes?.response?.game_count != null) {
-      games = ownedRes.response.game_count;
-    }
+    if (ownedRes?.response?.game_count != null) games = ownedRes.response.game_count;
     const topOwned = ownedGames.reduce(
-      (top, game) =>
-        (game.playtime_forever || 0) > (top?.playtime_forever || 0) ? game : top,
+      (top, game) => (game.playtime_forever || 0) > (top?.playtime_forever || 0) ? game : top,
       null
     );
-    if (topOwned?.name) {
-      mostPlayedGame = topOwned.name;
-    }
+    if (topOwned?.name) mostPlayedGame = topOwned.name;
+    const totalMinutes = ownedGames.reduce((sum, game) => sum + (game.playtime_forever || 0), 0);
+    totalPlaytime = formatTotalHours(totalMinutes);
   } catch (err) {
     console.warn("Could not fetch owned games:", err.message);
   }
 
   // Recently played: last played, summed 2 week playtime, and 2 week most played.
   let lastPlayed = inGameName || "None";
-  let playtime = "0.0 hrs";
-  let recentHours = 0;
+  let playtimeFormatted = "0.0 hrs";       // total 2‑week playtime as string
+  let recentPlaytimeFormatted = "0.0 hrs"; // same as above, but for the separate field
   let mostPlayedRecentGame = "None";
   try {
-    const recentRes = await steamGet(
-      "/IPlayerService/GetRecentlyPlayedGames/v1/",
-      { steamid: steamId }
-    );
+    const recentRes = await steamGet("/IPlayerService/GetRecentlyPlayedGames/v1/", {
+      steamid: steamId
+    });
     const recentGames = recentRes?.response?.games || [];
 
-    if (!inGameName && recentGames[0]?.name) {
-      lastPlayed = recentGames[0].name;
-    }
+    if (!inGameName && recentGames[0]?.name) lastPlayed = recentGames[0].name;
 
-    const recentMinutes = recentGames.reduce(
-      (sum, game) => sum + (game.playtime_2weeks || 0),
-      0
-    );
-    playtime = formatHours(recentMinutes);
-    recentHours = Math.round((recentMinutes / 60) * 10) / 10;
+    const recentMinutes = recentGames.reduce((sum, game) => sum + (game.playtime_2weeks || 0), 0);
+    playtimeFormatted = formatHours(recentMinutes);
+    recentPlaytimeFormatted = formatHours(recentMinutes); // same formatting
 
     const topRecent = recentGames.reduce(
-      (top, game) =>
-        (game.playtime_2weeks || 0) > (top?.playtime_2weeks || 0) ? game : top,
+      (top, game) => (game.playtime_2weeks || 0) > (top?.playtime_2weeks || 0) ? game : top,
       null
     );
-    if (topRecent?.name) {
-      mostPlayedRecentGame = topRecent.name;
-    }
+    if (topRecent?.name) mostPlayedRecentGame = topRecent.name;
   } catch (err) {
     console.warn("Could not fetch recently played games:", err.message);
   }
@@ -165,12 +136,8 @@ async function updateWidget() {
   // Badge count (requires public profile). Sent as a number (type 2).
   let badges = 0;
   try {
-    const badgesRes = await steamGet("/IPlayerService/GetBadges/v1/", {
-      steamid: steamId
-    });
-    if (Array.isArray(badgesRes?.response?.badges)) {
-      badges = badgesRes.response.badges.length;
-    }
+    const badgesRes = await steamGet("/IPlayerService/GetBadges/v1/", { steamid: steamId });
+    if (Array.isArray(badgesRes?.response?.badges)) badges = badgesRes.response.badges.length;
   } catch (err) {
     console.warn("Could not fetch badges:", err.message);
   }
@@ -182,9 +149,7 @@ async function updateWidget() {
       steamid: steamId,
       relationship: "friend"
     });
-    if (Array.isArray(friendsRes?.friendslist?.friends)) {
-      friends = friendsRes.friendslist.friends.length;
-    }
+    if (Array.isArray(friendsRes?.friendslist?.friends)) friends = friendsRes.friendslist.friends.length;
   } catch (err) {
     console.warn("Could not fetch friends:", err.message);
   }
@@ -193,73 +158,21 @@ async function updateWidget() {
     username,
     data: {
       dynamic: [
-        {
-          type: 3,
-          name: "avatar",
-          value: {
-            url: avatar
-          }
-        },
-        {
-          type: 1,
-          name: "username",
-          value: username
-        },
-        {
-          type: 1,
-          name: "status",
-          value: status
-        },
-        {
-          type: 2,
-          name: "level",
-          value: level
-        },
-        {
-          type: 1,
-          name: "last_played",
-          value: lastPlayed
-        },
-        {
-          type: 2,
-          name: "games",
-          value: games
-        },
-        {
-          type: 1,
-          name: "playtime",
-          value: playtime
-        },
-        {
-          type: 1,
-          name: "profile_age",
-          value: profileAge
-        },
-        {
-          type: 2,
-          name: "badges",
-          value: badges
-        },
-        {
-          type: 2,
-          name: "friends",
-          value: friends
-        },
-        {
-          type: 2,
-          name: "recent_playtime",
-          value: recentHours
-        },
-        {
-          type: 1,
-          name: "most_played_game",
-          value: mostPlayedGame
-        },
-        {
-          type: 1,
-          name: "most_played_recent_game",
-          value: mostPlayedRecentGame
-        }
+        { type: 3, name: "avatar", value: { url: avatar } },
+        { type: 1, name: "username", value: username },
+        { type: 1, name: "status", value: status },
+        { type: 2, name: "level", value: level },
+        { type: 1, name: "last_played", value: lastPlayed },
+        { type: 2, name: "games", value: games },
+        { type: 1, name: "playtime", value: playtimeFormatted },
+        { type: 1, name: "total_playtime", value: totalPlaytime },
+        { type: 1, name: "profile_age", value: profileAge },
+        { type: 2, name: "badges", value: badges },
+        { type: 2, name: "friends", value: friends },
+        // recent_playtime is now a text field (type 1) with the same formatted string
+        { type: 1, name: "recent_playtime", value: recentPlaytimeFormatted },
+        { type: 1, name: "most_played_game", value: mostPlayedGame },
+        { type: 1, name: "most_played_recent_game", value: mostPlayedRecentGame }
       ]
     }
   };
@@ -282,8 +195,7 @@ async function updateWidget() {
       headers: {
         Authorization: `Bot ${process.env.BOT_TOKEN}`,
         "Content-Type": "application/json",
-        "User-Agent":
-          "DiscordBot (https://github.com/discord/discord-api-docs, 1.0.0)"
+        "User-Agent": "DiscordBot (https://github.com/discord/discord-api-docs, 1.0.0)"
       }
     }
   );
@@ -294,11 +206,11 @@ async function updateWidget() {
   console.log("🕹 Last played:", lastPlayed);
   console.log("📈 Level:", level);
   console.log("🎲 Games:", games);
-  console.log("⏱ Recent playtime:", playtime);
+  console.log("⏱ Recent playtime:", playtimeFormatted);
+  console.log("⌛ Total playtime:", totalPlaytime);
   console.log("📅 Profile age:", profileAge);
   console.log("🏅 Badges:", badges);
   console.log("🤝 Friends:", friends);
-  console.log("🕑 Recent hours:", recentHours);
   console.log("🏆 Most played:", mostPlayedGame);
   console.log("🔥 Most played (2w):", mostPlayedRecentGame);
 }

@@ -11,6 +11,7 @@ This project updates a Discord widget with data from your Steam profile, includi
 * Currently / most recently played game
 * Games owned count
 * Recent (2 week) playtime
+* Total playtime across all games
 * Profile age
 * Badge count
 * Friend count
@@ -74,10 +75,11 @@ exactly, otherwise the data will not bind.
 | last_played   | String |
 | games         | Number |
 | playtime      | String |
+| total_playtime | String |
 | profile_age   | String |
 | badges        | Number |
 | friends       | Number |
-| recent_playtime | Number |
+| recent_playtime | String |
 | most_played_game | String |
 | most_played_recent_game | String |
 
@@ -92,12 +94,13 @@ Data Field: avatar
 
 Do **not** use `Application Asset`, otherwise the avatar will not update dynamically.
 
-> `level`, `games`, `badges`, `friends` and `recent_playtime` are sent as numbers (payload `type: 2`),
-> so set them up as `Number` fields in the widget editor and let the widget design supply any labels.
-> `playtime` and `profile_age` stay `String` because they carry units (`hrs`, `years`).
+> `level`, `games`, `badges` and `friends` are sent as numbers (payload `type: 2`), so set them up
+> as `Number` fields in the widget editor and let the widget design supply any labels. `playtime`,
+> `total_playtime`, `recent_playtime` and `profile_age` stay `String` because they carry units
+> (`hrs`, `years`). `total_playtime` is your all time playtime summed across every owned game.
 >
-> `recent_playtime` is the same 2 week total as `playtime`, just as a bare number instead of a
-> `"X.X hrs"` string. Pick whichever fits your widget design; you do not need both.
+> `recent_playtime` is the same 2 week total as `playtime` and uses the same `"X.X hrs"` string.
+> Pick whichever fits your widget design; you do not need both.
 
 ## Installation
 
@@ -165,7 +168,7 @@ The script:
 
    * `GetPlayerSummaries` (avatar, persona, status, current game, profile age)
    * `GetSteamLevel` (Steam level)
-   * `GetOwnedGames` (games owned count, all time most played game)
+   * `GetOwnedGames` (games owned count, all time most played game, total playtime across all games)
    * `GetRecentlyPlayedGames` (last played game, 2 week playtime/hours, 2 week most played game)
    * `GetBadges` (badge count)
    * `GetFriendList` (friend count)
@@ -189,7 +192,8 @@ Using `Application Asset` will display a static image instead of the dynamic ava
 
 These fields depend on Steam privacy settings:
 
-* `games`, `playtime`, `recent_playtime`, `most_played_game` and `most_played_recent_game` require
+* `games`, `playtime`, `total_playtime`, `recent_playtime`, `most_played_game` and
+  `most_played_recent_game` require
   **Game details** set to **Public**.
 * `friends` requires your **Friends list** set to **Public**.
 * `badges` and `profile_age` require your overall profile to be **Public**.
